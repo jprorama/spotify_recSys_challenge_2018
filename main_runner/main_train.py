@@ -108,6 +108,17 @@ def run(conf, only_testmode):
         model_title = get_model(conf)
         model = DAE_title(conf, model_title.output)
 
+    # set up tensorboard logging
+    from datetime import datetime
+    import math
+    n_batches = math.ceil(len(reader.playlists)/conf.batch)
+    now = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    root_logdir = "tf_logs"
+    logdir = "{}/run-{}-{}/".format(root_logdir, conf.mode, now)
+
+    cost_summary = tf.summary.scalar('Cost', model.cost)
+    file_writer = tf.summary.FileWriter(logdir, tf.get_default_graph())
+
     info += ' start at ' + str(datetime.datetime.now())
     log_write(conf, '*'*10)
     log_write(conf, info)
@@ -149,12 +160,27 @@ def run(conf, only_testmode):
                                 feed_dict={model.x_positions: trk_positions, model.x_ones: trk_val,
                                            model.y_positions: y_positions, model.y_ones: np.ones(len(y_positions)),
                                            model.keep_prob: conf.kp, model.input_keep_prob: input_kp})
+                if iter % 10 == 0:
+                    summary_str = cost_summary.eval(
+                        feed_dict={model.x_positions: trk_positions, model.x_ones: trk_val,
+                                   model.y_positions: y_positions, model.y_ones: np.ones(len(y_positions)),
+                                   model.keep_prob: conf.kp, model.input_keep_prob: input_kp})
+                    step = epoch * n_batches + iter
+                    file_writer.add_summary(summary_str, step)
 
             elif rand_int == 1:
                 _, l = sess.run([model.optimizer, model.cost],
                                 feed_dict={model.x_positions: art_positions, model.x_ones: art_val,
                                            model.y_positions: y_positions, model.y_ones: np.ones(len(y_positions)),
                                            model.keep_prob: conf.kp, model.input_keep_prob: input_kp})
+                if iter % 10 == 0:
+                    summary_str = cost_summary.eval(
+                        feed_dict={model.x_positions: trk_positions, model.x_ones: trk_val,
+                                   model.y_positions: y_positions, model.y_ones: np.ones(len(y_positions)),
+                                   model.keep_prob: conf.kp, model.input_keep_prob: input_kp})
+                    step = epoch * n_batches + iter
+                    file_writer.add_summary(summary_str, step)
+
         elif conf.mode == 'title':
             _, l = sess.run([model.optimizer, model.cost],
                             feed_dict={model.x_positions: y_positions, model.x_ones: np.ones(len(y_positions)),
@@ -163,6 +189,14 @@ def run(conf, only_testmode):
                                        model.keep_prob: conf.kp, model_title.keep_prob: conf.title_kp,
                                        model.input_keep_prob: input_kp,
                                        model.titles_use: [[1]] * conf.batch})
+            if iter % 10 == 0:
+                summary_str = cost_summary.eval(
+                    feed_dict={model.x_positions: trk_positions, model.x_ones: trk_val,
+                               model.y_positions: y_positions, model.y_ones: np.ones(len(y_positions)),
+                               model.keep_prob: conf.kp, model.input_keep_prob: input_kp})
+                step = epoch * n_batches + iter
+                file_writer.add_summary(summary_str, step)
+
 
         loss += l
         iter += 1
